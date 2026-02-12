@@ -1,0 +1,59 @@
+# Configuration for browser agent
+
+# LLM Settings
+llm:
+  provider: "openai"  # openai, anthropic, local
+  model: "gpt-4o-mini"
+  temperature: 0.7
+  max_tokens: 4096
+  
+  # For local LLM (e.g., llama.cpp, vLLM, Ollama with OpenAI compatibility)
+  local:
+    base_url: "http://localhost:8000/v1"
+    # Recommended lightweight models for CPU:
+    # - phi-3-mini (3.8B)
+    # - mistral-7b-instruct
+    # - llama-3.2-3b-instruct
+
+# Browser Settings
+browser:
+  headless: false
+  screen_size:
+    width: 1440
+    height: 900
+  initial_url: "https://www.google.com"
+  
+  # User agent (optional)
+  user_agent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+
+# DOM Extraction Settings
+dom:
+  max_text_length: 200  # Maximum text length per element
+  max_elements: 100     # Maximum number of elements to extract
+  
+  # Filter settings
+  exclude_invisible: true
+  only_interactive: true
+
+# Agent Settings
+agent:
+  max_iterations: 20
+  verbose: true
+  
+  # Safety settings
+  confirm_navigation: false  # Ask before navigating to external sites
+  allowed_domains: []        # Empty = allow all
+
+# Vision Settings (Optional - for future YOLO integration)
+vision:
+  enabled: false
+  model: "yolov8n"  # Nano model for CPU
+  confidence_threshold: 0.5
+  
+# Logging
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR
+  save_conversations: true
+  conversation_dir: "./conversations"
+  save_screenshots: false
+  screenshot_dir: "./screenshots"

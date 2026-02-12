@@ -1,0 +1,26 @@
+# Core dependencies
+playwright>=1.40.0
+beautifulsoup4>=4.12.0
+lxml>=4.9.0
+
+# LLM clients
+openai>=1.12.0
+anthropic>=0.18.0
+requests>=2.31.0
+
+# Vision (optional - lightweight)
+opencv-python-headless>=4.8.0
+pillow>=10.0.0
+# ultralytics>=8.0.0  # Uncomment for YOLO support
+
+# Utilities
+pydantic>=2.5.0
+pyyaml>=6.0
+rich>=13.0.0
+tenacity>=8.2.0
+
+# Development
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+black>=23.0.0

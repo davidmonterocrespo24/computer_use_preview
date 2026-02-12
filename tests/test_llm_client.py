@@ -24,7 +24,7 @@ class TestLLMClient:
         assert 'scroll' in tool_names
         assert 'task_complete' in tool_names
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_openai_client_initialization(self, mock_openai):
         """Test OpenAI client initialization."""
         client = LLMClient(provider='openai', model='gpt-4o-mini')
@@ -33,7 +33,7 @@ class TestLLMClient:
         assert client.model == 'gpt-4o-mini'
         mock_openai.assert_called_once()
     
-    @patch('src.llm.client.Anthropic')
+    @patch('anthropic.Anthropic')
     def test_anthropic_client_initialization(self, mock_anthropic):
         """Test Anthropic client initialization."""
         client = LLMClient(provider='anthropic', model='claude-3-5-sonnet-20241022')
@@ -42,7 +42,7 @@ class TestLLMClient:
         assert client.model == 'claude-3-5-sonnet-20241022'
         mock_anthropic.assert_called_once()
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_local_client_initialization(self, mock_openai):
         """Test local LLM client initialization."""
         client = LLMClient(
@@ -55,7 +55,7 @@ class TestLLMClient:
         assert client.model == 'phi3'
         mock_openai.assert_called_once()
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_generate_openai_simple_response(self, mock_openai):
         """Test generating a simple text response with OpenAI."""
         # Mock the OpenAI response
@@ -82,7 +82,7 @@ class TestLLMClient:
         assert response.finish_reason == 'stop'
         assert response.actions is None
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_generate_openai_with_tool_calls(self, mock_openai):
         """Test generating response with tool calls (function calling)."""
         # Mock the OpenAI response with tool calls
@@ -115,7 +115,7 @@ class TestLLMClient:
         assert response.actions[0]['name'] == 'navigate'
         assert response.actions[0]['arguments']['url'] == 'https://google.com'
     
-    @patch('src.llm.client.Anthropic')
+    @patch('anthropic.Anthropic')
     def test_generate_anthropic_simple_response(self, mock_anthropic):
         """Test generating a simple response with Anthropic."""
         # Mock the Anthropic response
@@ -142,7 +142,7 @@ class TestLLMClient:
         assert response.content == 'I will help you navigate.'
         assert response.finish_reason == 'end_turn'
     
-    @patch('src.llm.client.Anthropic')
+    @patch('anthropic.Anthropic')
     def test_generate_anthropic_with_tool_use(self, mock_anthropic):
         """Test generating response with tool use (Anthropic)."""
         # Mock the Anthropic response with tool use
@@ -232,7 +232,7 @@ class TestLLMClient:
         actions = response.parse_actions()
         assert actions == []
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_generate_with_system_prompt(self, mock_openai):
         """Test generating with system prompt."""
         mock_client = Mock()
@@ -260,7 +260,7 @@ class TestLLMClient:
         assert sent_messages[0]['role'] == 'system'
         assert sent_messages[0]['content'] == system_prompt
     
-    @patch('src.llm.client.OpenAI')
+    @patch('openai.OpenAI')
     def test_generate_with_retry(self, mock_openai):
         """Test generating with retry on failure."""
         mock_client = Mock()

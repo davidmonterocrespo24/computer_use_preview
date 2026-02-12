@@ -52,7 +52,7 @@ class PlaywrightBrowser:
     
     def start(self):
         """Start the browser."""
-        print("🚀 Starting browser...")
+        # print("🚀 Starting browser...")  # Commented to avoid encoding issues
         self._playwright = sync_playwright().start()
         
         self._browser = self._playwright.chromium.launch(
@@ -79,7 +79,7 @@ class PlaywrightBrowser:
         
         # Navigate to initial URL
         self.navigate(self.initial_url)
-        print(f"✅ Browser started at {self.initial_url}")
+        # print(f"✅ Browser started at {self.initial_url}")  # Commented to avoid encoding issues
     
     def close(self):
         """Close the browser."""
@@ -91,7 +91,7 @@ class PlaywrightBrowser:
             self._browser.close()
         if self._playwright:
             self._playwright.stop()
-        print("🔴 Browser closed")
+        # print("🔴 Browser closed")  # Commented to avoid encoding issues
     
     def _handle_new_page(self, new_page: Page):
         """Handle new tabs by redirecting to current page."""
@@ -112,6 +112,7 @@ class PlaywrightBrowser:
         
         # Get HTML content
         html = self._page.content()
+        # print(f"DEBUG: html type = {type(html)}, value = {str(html)[:100]}")  # DEBUG
         
         # Get viewport elements with bounding boxes
         viewport_elements = self._get_viewport_elements()
@@ -201,7 +202,7 @@ class PlaywrightBrowser:
         try:
             return self._page.evaluate(script)
         except Exception as e:
-            print(f"⚠️  Error getting viewport elements: {e}")
+            # print(f"⚠️  Error getting viewport elements: {e}")  # Commented to avoid encoding issues
             return []
     
     # ============ Browser Actions ============
@@ -211,7 +212,7 @@ class PlaywrightBrowser:
         if not url.startswith(('http://', 'https://')):
             url = 'https://' + url
         
-        print(f"🌐 Navigating to: {url}")
+        # print(f"🌐 Navigating to: {url}")  # Commented to avoid encoding issues
         self._page.goto(url, wait_until="domcontentloaded")
         return self.get_state()
     
@@ -221,12 +222,12 @@ class PlaywrightBrowser:
         if not selector:
             raise ValueError(f"Element {element_id} not found")
         
-        print(f"🖱️  Clicking: {selector}")
+        # print(f"🖱️  Clicking: {selector}")  # Commented to avoid encoding issues
         try:
             self._page.click(selector, timeout=5000)
             self._page.wait_for_load_state("domcontentloaded")
         except Exception as e:
-            print(f"⚠️  Click failed, trying coordinates: {e}")
+            # print(f"⚠️  Click failed, trying coordinates: {e}")  # Commented to avoid encoding issues
             # Fallback to coordinate click
             coords = self.element_selector.get_coordinates(element_id)
             if coords:
@@ -236,7 +237,7 @@ class PlaywrightBrowser:
     
     def click_at(self, x: int, y: int) -> Dict[str, Any]:
         """Click at specific coordinates."""
-        print(f"🖱️  Clicking at: ({x}, {y})")
+        # print(f"🖱️  Clicking at: ({x}, {y})")  # Commented to avoid encoding issues
         self._page.mouse.click(x, y)
         self._page.wait_for_load_state("domcontentloaded")
         return self.get_state()
@@ -248,7 +249,7 @@ class PlaywrightBrowser:
         if not selector:
             raise ValueError(f"Element {element_id} not found")
         
-        print(f"⌨️  Typing '{text}' into: {selector}")
+        # print(f"⌨️  Typing '{text}' into: {selector}")  # Commented to avoid encoding issues
         
         # Click to focus
         self._page.click(selector)
@@ -270,7 +271,7 @@ class PlaywrightBrowser:
     def scroll(self, direction: Literal["up", "down", "left", "right"], 
                amount: int = 500) -> Dict[str, Any]:
         """Scroll the page."""
-        print(f"📜 Scrolling {direction}")
+        # print(f"📜 Scrolling {direction}")  # Commented to avoid encoding issues
         
         if direction == "down":
             self._page.evaluate(f"window.scrollBy(0, {amount})")
@@ -286,21 +287,21 @@ class PlaywrightBrowser:
     
     def go_back(self) -> Dict[str, Any]:
         """Navigate back in history."""
-        print("⬅️  Going back")
+        # print("⬅️  Going back")  # Commented to avoid encoding issues
         self._page.go_back()
         self._page.wait_for_load_state("domcontentloaded")
         return self.get_state()
     
     def go_forward(self) -> Dict[str, Any]:
         """Navigate forward in history."""
-        print("➡️  Going forward")
+        # print("➡️  Going forward")  # Commented to avoid encoding issues
         self._page.go_forward()
         self._page.wait_for_load_state("domcontentloaded")
         return self.get_state()
     
     def wait(self, seconds: int = 2) -> Dict[str, Any]:
         """Wait for a specified time."""
-        print(f"⏳ Waiting {seconds} seconds")
+        # print(f"⏳ Waiting {seconds} seconds")  # Commented to avoid encoding issues
         time.sleep(seconds)
         return self.get_state()
     
@@ -310,14 +311,14 @@ class PlaywrightBrowser:
         if not selector:
             raise ValueError(f"Element {element_id} not found")
         
-        print(f"👆 Hovering: {selector}")
+        # print(f"👆 Hovering: {selector}")  # Commented to avoid encoding issues
         self._page.hover(selector)
         time.sleep(0.3)
         return self.get_state()
     
     def press_key(self, key: str) -> Dict[str, Any]:
         """Press a keyboard key."""
-        print(f"⌨️  Pressing key: {key}")
+        # print(f"⌨️  Pressing key: {key}")  # Commented to avoid encoding issues
         self._page.keyboard.press(key)
         time.sleep(0.2)
         return self.get_state()
@@ -327,7 +328,7 @@ class PlaywrightBrowser:
         screenshot = self._page.screenshot(type="png", full_page=False)
         if filepath:
             Path(filepath).write_bytes(screenshot)
-            print(f"📸 Screenshot saved to: {filepath}")
+            # print(f"📸 Screenshot saved to: {filepath}")  # Commented to avoid encoding issues
         return screenshot
     
     def get_url(self) -> str:

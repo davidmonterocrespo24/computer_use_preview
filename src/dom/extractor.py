@@ -79,12 +79,12 @@ class DOMExtractor:
         """
         soup = BeautifulSoup(html, 'lxml')
         
-        # Remove script, style, and other non-content elements
-        for element in soup(['script', 'style', 'noscript', 'meta', 'link', 'head']):
-            element.decompose()
-        
-        # Extract page metadata
+        # Extract page metadata BEFORE removing elements
         title = soup.title.string if soup.title else ""
+        
+        # Remove script, style, and other non-content elements
+        for element in soup(['script', 'style', 'noscript', 'meta', 'link']):
+            element.decompose()
         
         # Extract interactive elements
         elements = self._extract_interactive_elements(soup, viewport_elements)

@@ -17,11 +17,12 @@ import argparse
 import io
 import json
 import os
+import subprocess
 import sys
 import time
 from contextlib import redirect_stdout
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict
+from typing import List, Optional, Dict, Set
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -141,6 +142,58 @@ def _install_timing_hook(llm_client, timings: list):
         return result
 
     llm_client.generate_with_retry = timed
+
+
+# ---------------------------------------------------------------------------
+# Model pull
+# ---------------------------------------------------------------------------
+
+# Models used internally by the rule-based orchestrator (all 4 tiers)
+ORCHESTRATOR_TIER_MODELS = [
+    "lfm2.5-thinking:latest",
+    "ministral-3:3b",
+    "granite3.2-vision:latest",
+    "qwen3-vl:4b",
+]
+
+
+def _collect_required_models(configs: List[ModelConfig]) -> Set[str]:
+    """Return the full set of Ollama model names needed to run these configs."""
+    needed: Set[str] = set()
+    for cfg in configs:
+        needed.add(cfg.model)
+        if cfg.router_model:
+            needed.add(cfg.router_model)
+        if cfg.use_orchestrator:
+            needed.update(ORCHESTRATOR_TIER_MODELS)
+    return needed
+
+
+def ensure_models_available(configs: List[ModelConfig], installed: Set[str]) -> bool:
+    """
+    Check which models required by `configs` are missing from Ollama and pull them.
+
+    Returns True if all models are ready, False if any pull failed.
+    """
+    needed = _collect_required_models(configs)
+    to_pull = sorted(needed - installed)
+
+    if not to_pull:
+        print("  All required models are already installed.")
+        return True
+
+    print(f"\n  Models to download ({len(to_pull)}): {', '.join(to_pull)}")
+    all_ok = True
+    for model in to_pull:
+        print(f"\n  Pulling {model} ...")
+        result = subprocess.run(["ollama", "pull", model], check=False)
+        if result.returncode == 0:
+            print(f"  [OK] {model} downloaded successfully.")
+        else:
+            print(f"  [ERROR] Failed to pull {model} (exit code {result.returncode}).")
+            all_ok = False
+
+    return all_ok
 
 
 # ---------------------------------------------------------------------------
@@ -305,6 +358,12 @@ def main():
         sys.exit(1)
 
     selected = [CONFIGS[k] for k in args.configs]
+
+    # Pull any missing models before starting
+    print("\n  Checking required models...")
+    if not ensure_models_available(selected, installed):
+        print("\nERROR: One or more models could not be downloaded. Aborting.")
+        sys.exit(1)
     total = len(selected)
 
     print()

@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_real_navigation.py::TestAnnotatedScreenshot -v)",
+      "Bash(pip install opencv-python-headless --quiet)",
+      "Bash(python -m pytest tests/test_real_navigation.py::TestAnnotatedScreenshot tests/test_model_orchestrator.py -v)",
+      "Bash(python -m pytest tests/test_model_orchestrator.py tests/test_real_navigation.py::TestOrchestratorSelectionLogic tests/test_real_navigation.py::TestAnnotatedScreenshot -v)",
+      "Bash(python -m pytest tests/test_agent.py tests/test_selector.py tests/test_llm_client.py -v)",
+      "Bash(python -m pytest tests/test_model_orchestrator.py tests/test_real_navigation.py::TestOrchestratorSelectionLogic tests/test_real_navigation.py::TestAnnotatedScreenshot tests/test_agent.py tests/test_llm_client.py tests/test_selector.py -v)",
+      "Bash(python -c \":*)",
+      "Read(//c/Users/000272869/.claude/projects/c--Desarrollo-browser-use-computer-use-preview/memory/**)",
+      "Bash(curl -s http://localhost:11434/api/tags)",
+      "Bash(timeout 120 python main.py --query \"Go to https://example.com and tell me the page title and main heading\" --provider local --base-url http://localhost:11434/v1 --max-iterations 5 --log-level INFO --headless)",
+      "Bash(pip install lxml -q)",
+      "Bash(python -m pytest tests/test_model_orchestrator.py -v -q)",
+      "Bash(timeout 300 python main.py --query \"Go to https://example.com and tell me the page title and main heading\" --provider local --base-url http://localhost:11434/v1 --max-iterations 5 --log-level INFO --headless)",
+      "Bash(python main.py --query \"Navigate to https://example.com and report the page title and h1 heading\" --provider local --base-url http://localhost:11434/v1 --max-iterations 3 --log-level INFO --headless)",
+      "Bash(python main.py --query \"Go to en.wikipedia.org, search for ''Python programming language'', then tell me the year it was first released and who created it\" --provider local --base-url http://localhost:11434/v1 --model lfm2.5-thinking:latest --no-orchestrator --max-iterations 8 --log-level INFO --headless)",
+      "Read(//c/Users/000272869/AppData/Local/Temp/claude/c--Desarrollo-browser-use-computer-use-preview/tasks/**)",
+      "Bash(python main.py --query \"Go to https://pypi.org, search for ''playwright'', and tell me the name and description of the first result\" --provider local --base-url http://localhost:11434/v1 --model ministral-3:3b --no-orchestrator --max-iterations 7 --initial-url about:blank --log-level INFO --headless)",
+      "Bash(python main.py --query \"Go to https://pypi.org, use the search box to search for ''playwright'', and tell me the name and short description of the first result\" --provider local --base-url http://localhost:11434/v1 --model ministral-3:3b --no-orchestrator --max-iterations 7 --log-level INFO --headless)",
+      "Bash(python -m pytest tests/test_model_orchestrator.py tests/test_real_navigation.py::TestOrchestratorSelectionLogic tests/test_real_navigation.py::TestAnnotatedScreenshot -q)",
+      "Bash(python benchmark/benchmark_navigation.py --configs A B C F --max-iterations 8)",
+      "Bash(python benchmark/benchmark_navigation.py --configs A B C D --max-iterations 5)"
+    ]
+  }
+}

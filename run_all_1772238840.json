@@ -1,0 +1,24 @@
+[
+  {
+    "config_id": "A",
+    "label": "lfm2.5-thinking (0.7B)",
+    "description": "0.7B - smallest thinking model",
+    "success": false,
+    "accurate": false,
+    "iterations": 6,
+    "total_sec": 744.0,
+    "result_text": "Maximum iterations reached without completing task",
+    "error": ""
+  },
+  {
+    "config_id": "B",
+    "label": "granite4:3b (2.1GB)",
+    "description": "IBM Granite 3B text",
+    "success": false,
+    "accurate": false,
+    "iterations": 6,
+    "total_sec": 775.3,
+    "result_text": "Maximum iterations reached without completing task",
+    "error": ""
+  }
+]

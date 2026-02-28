@@ -218,6 +218,80 @@ class LightweightVisionDetector:
         
         return annotated
     
+    def annotate_screenshot_with_dom(
+        self,
+        image: np.ndarray,
+        dom_elements: List[Dict],
+    ) -> np.ndarray:
+        """
+        Draw numbered bounding boxes on a screenshot for each DOM element that
+        has a bbox. This annotated image is sent to a vision LLM so the model
+        can see exactly where each element is on the page.
+
+        Box colors:
+          - Green  → button, a (links)
+          - Blue   → input, textarea, select
+          - Yellow → other interactive elements
+
+        Args:
+            image: Screenshot as BGR numpy array
+            dom_elements: List of DOM element dicts (from DOMExtractor.extract)
+
+        Returns:
+            Annotated image with numbered element boxes
+        """
+        annotated = image.copy()
+        font = cv2.FONT_HERSHEY_SIMPLEX
+
+        for elem in dom_elements:
+            bbox = elem.get("bbox")
+            if not bbox:
+                continue
+
+            x = int(bbox.get("x", 0))
+            y = int(bbox.get("y", 0))
+            w = int(bbox.get("width", 0))
+            h = int(bbox.get("height", 0))
+
+            if w <= 0 or h <= 0:
+                continue
+
+            tag = elem.get("tag", "").lower()
+            elem_id = elem.get("id", "")
+
+            # Color by element type
+            if tag in ("button", "a"):
+                color = (0, 200, 0)   # Green
+            elif tag in ("input", "textarea", "select"):
+                color = (200, 100, 0)  # Blue
+            else:
+                color = (0, 200, 200)  # Yellow
+
+            # Draw rectangle
+            cv2.rectangle(annotated, (x, y), (x + w, y + h), color, 2)
+
+            # Build label: element id + tag (e.g. "elem_3: button")
+            label = f"{elem_id}: {tag}"
+            if elem.get("text"):
+                label += f" \"{elem['text'][:20]}\""
+
+            # Background rect for label readability
+            (text_w, text_h), baseline = cv2.getTextSize(label, font, 0.45, 1)
+            label_y = max(y - 4, text_h + baseline)
+            cv2.rectangle(
+                annotated,
+                (x, label_y - text_h - baseline),
+                (x + text_w, label_y + baseline),
+                color,
+                cv2.FILLED,
+            )
+            cv2.putText(
+                annotated, label, (x, label_y - baseline),
+                font, 0.45, (0, 0, 0), 1, cv2.LINE_AA,
+            )
+
+        return annotated
+
     def merge_with_dom(
         self, 
         visual_elements: List[VisualElement],

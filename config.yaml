@@ -44,11 +44,76 @@ agent:
   confirm_navigation: false  # Ask before navigating to external sites
   allowed_domains: []        # Empty = allow all
 
-# Vision Settings (Optional - for future YOLO integration)
+# Vision Settings
 vision:
-  enabled: false
-  model: "yolov8n"  # Nano model for CPU
+  enabled: true
+  use_yolo: false
+  model: "yolov8n"  # Nano model for CPU (requires ultralytics, set use_yolo: true)
   confidence_threshold: 0.5
+
+# Model Orchestrator - dynamically selects model based on context
+orchestrator:
+  enabled: true
+  dom_sparse_threshold: 5       # element count below which vision activates
+  stuck_iteration_threshold: 3  # same URL for N iters → escalate to vision
+
+  # LLM Router: tiny model (1-2B) that classifies which tier to use each iteration
+  # Set enabled: true to use LLM-based routing instead of rule-based selection
+  router:
+    enabled: false              # set true to activate LLM router
+    model: "gemma3:1b"
+    base_url: "http://localhost:11434/v1"
+    timeout_sec: 8.0
+
+  tiers:
+    ultra_fast:
+      model: "lfm2.5-thinking:latest"
+      base_url: "http://localhost:11434/v1"
+      supports_vision: false
+      max_tokens: 1024
+      temperature: 0.3
+    balanced:
+      model: "ministral-3:3b"
+      base_url: "http://localhost:11434/v1"
+      supports_vision: false
+      max_tokens: 2048
+      temperature: 0.5
+    quick_vision:
+      model: "granite3.2-vision:latest"
+      base_url: "http://localhost:11434/v1"
+      supports_vision: true
+      max_tokens: 2048
+      temperature: 0.5
+    full_vision:
+      model: "qwen3-vl:4b"
+      base_url: "http://localhost:11434/v1"
+      supports_vision: true
+      max_tokens: 4096
+      temperature: 0.7
+
+# Available models for benchmark (not used by orchestrator directly)
+benchmark_models:
+  - name: "ministral-3:3b"
+    size_gb: 3.0
+    type: "text"
+  - name: "granite4:3b"
+    size_gb: 2.1
+    type: "text"
+  - name: "gemma3:4b"
+    size_gb: 3.3
+    type: "text"
+  - name: "ministral-3:8b"
+    size_gb: 6.0
+    type: "text"
+  - name: "qwen3-vl:4b"
+    size_gb: 3.3
+    type: "vision"
+  - name: "qwen3-vl:8b"
+    size_gb: 6.1
+    type: "vision"
+  - name: "granite3.2-vision:latest"
+    size_gb: 2.4
+    type: "vision"
   
 # Logging
 logging:

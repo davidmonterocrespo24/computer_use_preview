@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ollama list)",
+      "Bash(wmic computersystem get TotalPhysicalMemory,Manufacturer,Model /format:value)",
+      "Bash(wmic cpu get Name,NumberOfCores,NumberOfLogicalProcessors,MaxClockSpeed /format:value)",
+      "Bash(wmic path win32_VideoController get Name,AdapterRAM,DriverVersion /format:value)",
+      "WebFetch(domain:localaimaster.com)",
+      "WebFetch(domain:dev.to)",
+      "WebFetch(domain:ollama.com)"
+    ]
+  }
+}

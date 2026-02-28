@@ -1,11 +1,15 @@
 """
 LLM Client - Interface to various LLM providers.
-Supports OpenAI, Anthropic, and local models.
+Supports OpenAI, Anthropic, and local models (including vision models via Ollama).
 """
 from typing import Dict, List, Any, Optional, Literal
 import json
+import logging
 import os
+import requests
 from dataclasses import dataclass
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -15,6 +19,7 @@ class LLMResponse:
     reasoning: Optional[str] = None
     actions: Optional[List[Dict[str, Any]]] = None
     finish_reason: str = "stop"
+    elapsed_sec: Optional[float] = None   # wall-clock time for the LLM call
     
     def parse_actions(self) -> List[Dict[str, Any]]:
         """Parse actions from response content."""
@@ -87,7 +92,8 @@ class LLMClient:
             )
         else:
             raise ValueError(f"Unknown provider: {provider}")
-    
+        log.debug("LLMClient initialized | provider=%s | model=%s | base_url=%s", provider, model, base_url)
+
     def generate(
         self,
         messages: List[Dict[str, str]],
@@ -201,17 +207,123 @@ class LLMClient:
         tools: Optional[List[Dict]] = None,
         max_retries: int = 3
     ) -> LLMResponse:
-        """Generate with automatic retry on failure."""
+        """Generate with automatic retry on failure. Records elapsed_sec on response."""
+        import time
         from tenacity import retry, stop_after_attempt, wait_exponential
-        
+
         @retry(
             stop=stop_after_attempt(max_retries),
             wait=wait_exponential(multiplier=1, min=2, max=10)
         )
         def _generate():
             return self.generate(messages, system_prompt, tools)
-        
-        return _generate()
+
+        t0 = time.perf_counter()
+        response = _generate()
+        response.elapsed_sec = time.perf_counter() - t0
+        log.debug("Text model response | model=%s | elapsed=%.1fs", self.model, response.elapsed_sec)
+        return response
+
+    @property
+    def is_vision_model(self) -> bool:
+        """Return True if this client's model supports image input."""
+        return self.model in {
+            "qwen3-vl:4b", "qwen3-vl:8b",
+            "granite3.2-vision:latest",
+            "moondream:latest",
+        }
+
+    def generate_with_image(
+        self,
+        messages: List[Dict[str, str]],
+        system_prompt: Optional[str],
+        image_b64: str,
+    ) -> LLMResponse:
+        """
+        Send a request to an Ollama vision model with an annotated screenshot.
+
+        Uses the Ollama native /api/chat endpoint which accepts an 'images' field.
+        The image should be a base64-encoded PNG (no data URL prefix).
+
+        Args:
+            messages: Conversation messages
+            system_prompt: System prompt text
+            image_b64: Base64-encoded screenshot (plain base64, not data URL)
+
+        Returns:
+            LLMResponse with the model's analysis
+        """
+        # Derive Ollama base from the OpenAI-compat base_url
+        # e.g. "http://localhost:11434/v1" → "http://localhost:11434"
+        if hasattr(self, 'client') and hasattr(self.client, 'base_url'):
+            raw_base = str(self.client.base_url).rstrip("/")
+            if raw_base.endswith("/v1"):
+                ollama_base = raw_base[:-3]
+            else:
+                ollama_base = raw_base
+        else:
+            ollama_base = os.getenv("LOCAL_LLM_BASE_URL", "http://localhost:11434/v1").replace("/v1", "")
+
+        # Build messages for Ollama API — attach image to the last user message
+        ollama_messages = []
+        if system_prompt:
+            ollama_messages.append({"role": "system", "content": system_prompt})
+
+        for i, msg in enumerate(messages):
+            if msg["role"] == "user" and i == len(messages) - 1:
+                # Attach image to the last user message
+                ollama_messages.append({
+                    "role": "user",
+                    "content": msg["content"],
+                    "images": [image_b64],
+                })
+            else:
+                ollama_messages.append({"role": msg["role"], "content": msg["content"]})
+
+        payload = {
+            "model": self.model,
+            "messages": ollama_messages,
+            "stream": False,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": self.max_tokens,
+            },
+        }
+
+        img_kb = len(image_b64) * 3 // 4 // 1024  # approx decoded size
+        log.info(
+            "Vision API call | model=%s | endpoint=%s/api/chat | image_size~%dKB | messages=%d",
+            self.model, ollama_base, img_kb, len(ollama_messages),
+        )
+        import time
+        t0 = time.perf_counter()
+        try:
+            resp = requests.post(
+                f"{ollama_base}/api/chat",
+                json=payload,
+                timeout=120,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            content = data.get("message", {}).get("content", "")
+            elapsed = time.perf_counter() - t0
+            log.info(
+                "Vision API response | model=%s | elapsed=%.1fs | response_chars=%d | done_reason=%s",
+                self.model, elapsed, len(content), data.get("done_reason", "?"),
+            )
+            return LLMResponse(
+                content=content,
+                finish_reason=data.get("done_reason", "stop"),
+                elapsed_sec=elapsed,
+            )
+        except requests.RequestException as e:
+            elapsed = time.perf_counter() - t0
+            log.error("Vision API error | model=%s | elapsed=%.1fs | error=%s", self.model, elapsed, e)
+            return LLMResponse(
+                content=f"[Vision model error: {e}]",
+                finish_reason="error",
+                elapsed_sec=elapsed,
+            )
 
 
 def create_browser_tools() -> List[Dict[str, Any]]:

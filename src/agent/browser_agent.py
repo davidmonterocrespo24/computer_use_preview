@@ -18,69 +18,53 @@ from ..llm.orchestrator import ModelOrchestrator, ModelTier, SelectionContext
 console = Console(legacy_windows=False, highlight=False)
 
 
-SYSTEM_PROMPT = """You are a helpful web browsing agent. Your task is to navigate web pages and complete user requests.
+SYSTEM_PROMPT = """You are a browser automation agent controlling a real web browser.
 
-You have access to a web browser and can see the DOM structure of pages. You will receive:
-1. The current URL
-2. The page title
-3. A list of interactive elements with their IDs, types, and text content
-4. Page headings for context
-5. Form structures if present
-6. (When visual mode is active) An annotated screenshot with numbered element boxes
+CRITICAL RULES — you MUST follow these:
+1. EVERY response MUST call exactly one tool using the JSON format below. No plain text responses.
+2. If you are ALREADY on the correct URL, do NOT call navigate() again — read the elements and act.
+3. Call task_complete() the MOMENT you have all the information needed. Do not keep browsing.
+4. If stuck at the same page with no progress, call scroll("down") to reveal more content.
+5. Use element IDs exactly as shown (e.g., "elem_5"), never guess or invent IDs.
 
-When you receive page information, analyze the available elements and decide what actions to take.
+You receive:
+- Current URL and page title
+- Page content snippet (first visible text)
+- Interactive elements with IDs (links, buttons, inputs)
+- Page headings
 
-Available actions:
-- navigate(url): Navigate to a URL
-- click(element_id): Click on an element using its ID (e.g., "elem_0")
-- type_text(element_id, text, press_enter): Type text into an input field
-- scroll(direction): Scroll the page (up/down/left/right)
-- go_back(): Go back in browser history
-- wait(seconds): Wait for content to load
-- task_complete(result, success): Mark the task as complete with the final result
+RESPONSE FORMAT — always output JSON like this:
+{"name": "navigate", "arguments": {"url": "https://example.com"}}
+{"name": "click", "arguments": {"element_id": "elem_5"}}
+{"name": "task_complete", "arguments": {"result": "your answer", "success": true}}
 
-Important guidelines:
-1. Always examine the page elements carefully before acting
-2. Look for elements with relevant text, aria-labels, or placeholders
-3. Use element IDs exactly as provided (e.g., "elem_0", "elem_1")
-4. If you can't find what you're looking for, try scrolling or navigating
-5. Break complex tasks into steps
-6. When the task is complete, always call task_complete() with the result
+Available tools:
+- navigate(url): Go to a URL (only if you need to change pages)
+- click(element_id): Click a link or button by its ID
+- type_text(element_id, text, press_enter): Type into an input field
+- scroll(direction): "up", "down", "left", "right"
+- go_back(): Return to previous page
+- wait(seconds): Wait for dynamic content
+- task_complete(result, success): FINISH — provide the complete answer
 
-Example element:
-{
-  "id": "elem_0",
-  "tag": "input",
-  "type": "text",
-  "placeholder": "Search...",
-  "aria_label": "Search box"
-}
-
-To interact with this element, use: type_text("elem_0", "your search query", True)
-
-Think step by step and explain your reasoning before taking each action.
+TASK COMPLETION: When you have found all required information, call task_complete() immediately.
+Example: {"name": "task_complete", "arguments": {"result": "Python was created by Guido van Rossum, first released in 1991. Guido van Rossum was born in 1956.", "success": true}}
 """
 
-VISION_SYSTEM_PROMPT = """You are a helpful web browsing agent operating in VISUAL MODE.
+VISION_SYSTEM_PROMPT = """You are a browser automation agent operating in VISUAL MODE.
 
-The screenshot you receive has colored numbered boxes drawn over each interactive element:
-- Green boxes: buttons and links
-- Blue boxes: input fields and text areas
-- Yellow boxes: other interactive elements
+CRITICAL RULES:
+1. EVERY response MUST call exactly one tool. Never output text without calling a tool.
+2. If you already have the answer, call task_complete() immediately.
+3. Use element IDs exactly as labeled in the screenshot boxes (e.g., "elem_3").
 
-Each box label shows the element ID and tag (e.g., "elem_3: button"). Use these element IDs
-exactly as labeled when calling actions.
+The screenshot has colored numbered boxes over interactive elements:
+- Green: buttons and links
+- Blue: input fields
+- Yellow: other interactive elements
 
-Available actions:
-- navigate(url): Navigate to a URL
-- click(element_id): Click on an element using its ID
-- type_text(element_id, text, press_enter): Type text into an input field
-- scroll(direction): Scroll the page (up/down/left/right)
-- go_back(): Go back in browser history
-- wait(seconds): Wait for content to load
-- task_complete(result, success): Mark the task as complete with the final result
-
-Analyze what you see in the annotated screenshot, identify the relevant elements, and take action.
+Tools: navigate(url), click(element_id), type_text(element_id, text, press_enter),
+scroll(direction), go_back(), wait(seconds), task_complete(result, success)
 """
 
 
@@ -359,11 +343,25 @@ class BrowserAgent:
     def _execute_actions(self, response: LLMResponse) -> Optional[Dict[str, Any]]:
         """Execute actions from LLM response."""
         actions = response.parse_actions()
-        
+
         if not actions:
             if self.verbose:
                 console.print("[yellow]WARNING: No actions returned by LLM[/yellow]")
             log.warning("LLM returned no actions")
+            # Inject a strong recovery message so the next iteration forces a tool call
+            current_url = self._url_history[-1] if self._url_history else "unknown"
+            self.conversation_history.append({
+                "role": "user",
+                "content": (
+                    'ERROR: You did not output a valid tool call. You MUST respond with JSON only.\n'
+                    f'You are at: {current_url}\n'
+                    'If you already have the answer, respond with exactly:\n'
+                    '{"name": "task_complete", "arguments": {"result": "your full answer", "success": true}}\n'
+                    'Otherwise pick an element and respond with:\n'
+                    '{"name": "click", "arguments": {"element_id": "elem_X"}}\n'
+                    'No other text. JSON only.'
+                )
+            })
             return None
 
         new_state = None
@@ -402,6 +400,19 @@ class BrowserAgent:
         self._last_action_type = action_name
 
         if action_name == "navigate":
+            target = args["url"].rstrip("/")
+            current = (self._url_history[-1] if self._url_history else "").rstrip("/")
+            if target == current:
+                log.warning("Blocked same-URL navigate | url=%s", args["url"])
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": (
+                        f"ERROR: You are already at {args['url']}. "
+                        "Navigate was blocked. Choose a different action: "
+                        "click an element, scroll, or call task_complete if you have the answer."
+                    )
+                })
+                return None
             return self.browser.navigate(args["url"])
         
         elif action_name == "click":
@@ -442,69 +453,105 @@ class BrowserAgent:
         else:
             raise ValueError(f"Unknown action: {action_name}")
     
+    def _extract_page_text(self, state: Dict[str, Any], max_chars: int = 500) -> str:
+        """Extract readable page text for context (article intro, key facts)."""
+        import re
+        html = state.get("html", "")
+        if not html:
+            return ""
+        try:
+            from bs4 import BeautifulSoup
+            soup = BeautifulSoup(html, "lxml")
+            # Remove noise
+            for tag in soup(["script", "style", "nav", "footer", "header", "noscript"]):
+                tag.decompose()
+            text = soup.get_text(separator=" ", strip=True)
+            text = re.sub(r"\s+", " ", text).strip()
+            return text[:max_chars]
+        except Exception:
+            return ""
+
     def _format_page_state(self, state: Dict[str, Any], initial_query: Optional[str] = None) -> str:
         """Format page state for LLM."""
         dom = state.get("dom", {})
-        
+
         message_parts = []
-        
+
         if initial_query:
             message_parts.append(f"Task: {initial_query}\n")
-        
+
         message_parts.append(f"Current URL: {state['url']}")
         message_parts.append(f"Page Title: {state['title']}\n")
-        
+
+        # Page text snippet (article intro / key facts)
+        page_text = self._extract_page_text(state)
+        if page_text:
+            message_parts.append("Page Content (first 500 chars):")
+            message_parts.append(f"  {page_text}")
+            message_parts.append("")
+
         # Add headings for context
         if dom.get("headings"):
-            message_parts.append("Page Structure:")
-            for h in dom["headings"][:5]:  # Top 5 headings
+            message_parts.append("Page Headings:")
+            for h in dom["headings"][:8]:
                 indent = "  " * (h["level"] - 1)
-                message_parts.append(f"{indent}H{h['level']}: {h['text']}")
+                message_parts.append(f"  {indent}H{h['level']}: {h['text']}")
             message_parts.append("")
-        
-        # Add interactive elements
+
+        # Add interactive elements — relevant ones first
         elements = dom.get("elements", [])
         if elements:
-            message_parts.append(f"Interactive Elements ({len(elements)} total):")
-            
-            # Show detailed info for first 20 elements, then summary
-            shown_elements = elements[:20]
-            
-            for elem in shown_elements:
+            # Extract keywords from task for relevance sorting
+            task_keywords: List[str] = []
+            if initial_query:
+                task_keywords = [w.lower() for w in initial_query.split() if len(w) > 3]
+
+            def _relevance(e: Dict) -> int:
+                text = (e.get("text", "") or "").lower()
+                href = (e.get("href", "") or "").lower()
+                combined = text + " " + href
+                return sum(1 for kw in task_keywords if kw in combined)
+
+            # Sort: relevant elements first, then by original order
+            sorted_elements = sorted(elements, key=lambda e: -_relevance(e))
+
+            # Show first 30 (more than before)
+            shown = sorted_elements[:30]
+
+            message_parts.append(f"Interactive Elements ({len(elements)} total, showing {len(shown)}):")
+            for elem in shown:
                 elem_desc = f"  [{elem['id']}] {elem['tag']}"
-                
-                if elem.get('type'):
-                    elem_desc += f" (type={elem['type']})"
-                
-                if elem.get('text'):
-                    elem_desc += f" - \"{elem['text'][:50]}\""
-                elif elem.get('aria_label'):
-                    elem_desc += f" - aria-label: \"{elem['aria_label']}\""
-                elif elem.get('placeholder'):
-                    elem_desc += f" - placeholder: \"{elem['placeholder']}\""
-                elif elem.get('alt'):
-                    elem_desc += f" - alt: \"{elem['alt']}\""
-                
-                if elem.get('href'):
-                    elem_desc += f" -> {elem['href'][:50]}"
-                
+
+                if elem.get("type"):
+                    elem_desc += f"({elem['type']})"
+
+                label = (
+                    elem.get("text")
+                    or elem.get("aria_label")
+                    or elem.get("placeholder")
+                    or elem.get("alt")
+                    or ""
+                )
+                if label:
+                    elem_desc += f" \"{label[:60]}\""
+
+                if elem.get("href"):
+                    elem_desc += f" -> {elem['href'][:60]}"
+
                 message_parts.append(elem_desc)
-            
-            if len(elements) > 20:
-                message_parts.append(f"  ... and {len(elements) - 20} more elements")
+
+            if len(elements) > 30:
+                message_parts.append(f"  ... and {len(elements) - 30} more (scroll down to reveal)")
         else:
             message_parts.append("No interactive elements found on this page.")
-        
-        # Add forms if present
+
+        # Forms
         forms = dom.get("forms", [])
         if forms:
             message_parts.append(f"\nForms ({len(forms)}):")
-            for i, form in enumerate(forms[:3]):  # Show top 3 forms
-                message_parts.append(f"  Form {i+1}:")
-                message_parts.append(f"    Action: {form.get('action', 'N/A')}")
-                message_parts.append(f"    Method: {form.get('method', 'N/A')}")
-                message_parts.append(f"    Fields: {len(form.get('fields', []))}")
-        
+            for i, form in enumerate(forms[:3]):
+                message_parts.append(f"  Form {i+1}: action={form.get('action','?')} fields={len(form.get('fields',[]))}")
+
         return "\n".join(message_parts)
     
     def get_conversation_history(self) -> List[Dict[str, str]]:

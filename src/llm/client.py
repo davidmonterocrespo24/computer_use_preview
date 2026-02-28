@@ -22,25 +22,97 @@ class LLMResponse:
     elapsed_sec: Optional[float] = None   # wall-clock time for the LLM call
     
     def parse_actions(self) -> List[Dict[str, Any]]:
-        """Parse actions from response content."""
+        """Parse actions from response content.
+
+        Handles multiple output formats:
+        1. OpenAI tool_calls (already in self.actions)
+        2. LFM2.5 / LiquidAI format: <|tool_call_start|>[func(args)]<|tool_call_end|>
+        3. JSON fenced block: ```json [...]```
+        4. Raw JSON object/array in content
+        5. Plain-text patterns: Action: navigate / Args: {...}
+        """
+        import re
+
         if self.actions:
             return self.actions
-        
-        # Try to extract JSON from response
+
+        content = self.content or ""
+
+        # --- 1. LFM2.5 special-token format -----------------------------------
+        # <|tool_call_start|>[func(arg=val, ...)]<|tool_call_end|>
+        lfm_match = re.search(
+            r"<\|tool_call_start\|>(.*?)<\|tool_call_end\|>",
+            content, re.DOTALL
+        )
+        if lfm_match:
+            raw = lfm_match.group(1).strip()
+            # Could be JSON list or Python-style call list
+            # Try JSON first
+            try:
+                data = json.loads(raw)
+                if isinstance(data, list) and data:
+                    # Could be [{"name":..,"arguments":...}] or [{func:..}]
+                    if isinstance(data[0], dict):
+                        # Normalise key names
+                        actions = []
+                        for item in data:
+                            name = item.get("name") or item.get("function") or ""
+                            args = item.get("arguments") or item.get("args") or item.get("parameters") or {}
+                            if name:
+                                actions.append({"name": name, "arguments": args})
+                        if actions:
+                            return actions
+            except Exception:
+                pass
+            # Try Python-style: [func_name(key="val", key2=val2), ...]
+            py_calls = re.findall(r'(\w+)\(([^)]*)\)', raw)
+            if py_calls:
+                actions = []
+                for func_name, args_str in py_calls:
+                    args = {}
+                    for kv in re.finditer(r'(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|\'(?:[^\'\\]|\\.)*\'|\S+)', args_str):
+                        k = kv.group(1)
+                        v = kv.group(2).strip("\"'")
+                        # Convert booleans
+                        if v.lower() == "true":
+                            v = True
+                        elif v.lower() == "false":
+                            v = False
+                        args[k] = v
+                    actions.append({"name": func_name, "arguments": args})
+                if actions:
+                    return actions
+
+        # --- 2. JSON fenced block ---------------------------------------------
         try:
-            # Look for JSON block in response
-            if "```json" in self.content:
-                json_start = self.content.find("```json") + 7
-                json_end = self.content.find("```", json_start)
-                json_str = self.content[json_start:json_end].strip()
+            if "```json" in content:
+                json_start = content.find("```json") + 7
+                json_end = content.find("```", json_start)
+                json_str = content[json_start:json_end].strip()
                 data = json.loads(json_str)
                 if isinstance(data, list):
                     return data
                 elif isinstance(data, dict) and "actions" in data:
                     return data["actions"]
+                elif isinstance(data, dict) and "name" in data:
+                    return [data]
         except Exception:
             pass
-        
+
+        # --- 3. Raw JSON anywhere in content ----------------------------------
+        try:
+            # Find first [...] or {...} block
+            for pattern in (r'\[\s*\{.*?\}\s*\]', r'\{[^{}]*"name"\s*:.*?\}'):
+                m = re.search(pattern, content, re.DOTALL)
+                if m:
+                    data = json.loads(m.group(0))
+                    if isinstance(data, list):
+                        return data
+                    elif isinstance(data, dict) and "name" in data:
+                        return [data]
+        except Exception:
+            pass
+
         return []
 
 

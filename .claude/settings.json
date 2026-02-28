@@ -21,7 +21,11 @@
       "Bash(python main.py --query \"Go to https://pypi.org, use the search box to search for ''playwright'', and tell me the name and short description of the first result\" --provider local --base-url http://localhost:11434/v1 --model ministral-3:3b --no-orchestrator --max-iterations 7 --log-level INFO --headless)",
       "Bash(python -m pytest tests/test_model_orchestrator.py tests/test_real_navigation.py::TestOrchestratorSelectionLogic tests/test_real_navigation.py::TestAnnotatedScreenshot -q)",
       "Bash(python benchmark/benchmark_navigation.py --configs A B C F --max-iterations 8)",
-      "Bash(python benchmark/benchmark_navigation.py --configs A B C D --max-iterations 5)"
+      "Bash(python benchmark/benchmark_navigation.py --configs A B C D --max-iterations 5)",
+      "Bash(python -m pytest tests/test_model_orchestrator.py -q)",
+      "Bash(python benchmark/run_all_models.py --configs A B C --max-iterations 6)",
+      "WebFetch(domain:docs.liquid.ai)",
+      "WebFetch(domain:nikolasent.github.io)"
     ]
   }
 }
